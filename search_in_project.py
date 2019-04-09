@@ -29,6 +29,8 @@ basedir = os.getcwd()
 
 class SearchInProjectCommand(sublime_plugin.WindowCommand):
 
+    INPUT_PROMPT_STR = "Search in project:"
+
     # Used to trim lines for the results quick panel. Without trimming Sublime Text
     # *will* hang on long lines - often encountered in minified Javascript, for example.
     MAX_RESULT_LINE_LENGTH = 1000
@@ -67,7 +69,7 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
         selection_text = view.substr(view.sel()[0])
         self.saved_view = view
         panel_view = self.window.show_input_panel(
-            "Search in project:",
+            self.INPUT_PROMPT_STR,
             not "\n" in selection_text and selection_text or self.last_search_string,
             self.perform_search, None, None)
         panel_view.run_command("select_all")
@@ -174,6 +176,53 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
             else:
                 break
         return "\"" + "/".join(common_path) + "/\""
+
+class FindDefinitionInProjectCommand(SearchInProjectCommand):
+
+    INPUT_PROMPT_STR = "Find definition in project:"
+
+    def perform_search(self, text_raw):
+        text_raw = text_raw.strip()
+
+        if not text_raw:
+            return
+
+        is_type_level = text_raw[0].upper() == text_raw[0]
+
+        if is_type_level:
+            data_text = r'\s(data|newtype|type)\s+{}(\s+[a-z]+)*\s+(=|where)\s'.format(text_raw)
+            class_text = r'\sclass\s+([a-zA-Z\s]+=>\s+)?{}(\s+[a-z]+)*\s+where\s'.format(text_raw)
+            text = r'(({})|({}))'.format(data_text, class_text)
+        else:
+            text = r'\s({})\s+::\s+.'.format(text_raw)
+
+        if self.last_search_string != text:
+            self.last_selected_result_index = 0
+        self.last_search_string = text
+        folders = self.search_folders()
+
+        self.common_path = self.find_common_path(folders)
+        try:
+            self.results = self.engine.run(text, folders, keep_adjacents=False)
+            if self.results:
+                self.results = [[result[0].replace(self.common_path.replace('\"', ''), ''), result[1][:self.MAX_RESULT_LINE_LENGTH]] for result in self.results]
+                if self.settings.get('search_in_project_show_list_by_default') == 'true':
+                    self.list_in_view()
+                else:
+                    self.results.append("``` List results in view ```")
+                    flags = 0
+                    self.window.show_quick_panel(
+                        self.results,
+                        self.goto_result,
+                        flags,
+                        self.last_selected_result_index,
+                        self.on_highlighted)
+            else:
+                self.results = []
+                sublime.message_dialog('No results')
+        except Exception as e:
+            self.results = []
+            sublime.error_message("%s running search engine %s:"%(e.__class__.__name__,self.engine_name) + "\n" + str(e))
 
 class SearchInProjectResultsCommand(sublime_plugin.TextCommand):
     def format_result(self, common_path, filename, lines):

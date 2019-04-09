@@ -4,6 +4,10 @@
     "command": "search_in_project", "args": {"type": "search"},
   },
   {
+    "caption": "SearchInProject: Find definition",
+    "command": "find_definition_in_project", "args": {"type": "search"},
+  },
+  {
     "caption": "SearchInProject: Clear results",
     "command": "search_in_project", "args": {"type": "clear"},
   },
