@@ -74,9 +74,17 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
             self.perform_search, None, None)
         panel_view.run_command("select_all")
 
+    def run_engine(self, text, folders):
+        return self.engine.run(text, folders)
+
+    def process_text(self, text_raw):
+        return text_raw
+
     def perform_search(self, text):
         if not text:
             return
+
+        text = self.process_text(text)
 
         if self.last_search_string != text:
             self.last_selected_result_index = 0
@@ -85,14 +93,16 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
 
         self.common_path = self.find_common_path(folders)
         try:
-            self.results = self.engine.run(text, folders)
+            self.results = self.run_engine(text, folders)
+            print("self.results")
+            print(self.results)
             if self.results:
                 self.results = [[result[0].replace(self.common_path.replace('\"', ''), ''), result[1][:self.MAX_RESULT_LINE_LENGTH]] for result in self.results]
                 if self.settings.get('search_in_project_show_list_by_default') == 'true':
                     self.list_in_view()
                 else:
                     self.results.append("``` List results in view ```")
-                    flags = 0
+                    flags = sublime.KEEP_OPEN_ON_FOCUS_LOST
                     self.window.show_quick_panel(
                         self.results,
                         self.goto_result,
@@ -113,13 +123,29 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
 
     def open_and_highlight_file(self, file_no, transient=False):
         file_name_and_col = self.common_path.replace('\"', '') + self.results[file_no][0]
+
+        if ':' in file_name_and_col:
+            file_name = file_name_and_col[:file_name_and_col.find(':')]
+        else:
+            file_name = file_name_and_col
+
+        active_view_id = self.window.active_view().id()
+        file_already_open = any(v.id() != active_view_id and v.file_name() == file_name
+                                for v in self.window.views())
+        if transient and file_already_open:
+            return
+
         flags = sublime.ENCODED_POSITION
         if transient:
             flags |= sublime.TRANSIENT
-        view = self.window.open_file(file_name_and_col, flags)
 
+        view = self.window.open_file(file_name_and_col, flags)
         regions = view.find_all(self.last_search_string, sublime.IGNORECASE)
-        view.add_regions("search_in_project", regions, "entity.name.filename.find-in-files", "circle", sublime.DRAW_OUTLINED)
+        view.add_regions("search_in_project",
+                         regions,
+                         "entity.name.filename.find-in-files",
+                         "circle",
+                         sublime.DRAW_OUTLINED)
 
     def goto_result(self, file_no):
         if file_no == -1:
@@ -177,52 +203,49 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
                 break
         return "\"" + "/".join(common_path) + "/\""
 
+def auto_search(self):
+    self.load_search_engine()
+    view = self.window.active_view()
+    selection_text = view.substr(view.sel()[0])
+    self.saved_view = view
+    self.perform_search(selection_text)
+
+class SearchSelectionInProjectCommand(SearchInProjectCommand):
+
+    def search(self):
+        auto_search(self)
+
 class FindDefinitionInProjectCommand(SearchInProjectCommand):
 
     INPUT_PROMPT_STR = "Find definition in project:"
 
-    def perform_search(self, text_raw):
+    def run_engine(self, text, folders):
+        return self.engine.run(text, folders, keep_adjacents=False)
+
+    def process_text(self, text_raw):
         text_raw = text_raw.strip()
+        if text_raw[0].upper() == text_raw[0]:
+            data_text = r'^(data|newtype|type)\s+{}(\s+[a-z]+)*\s+(=|where)\s'.format(text_raw)
+            class_text = r'^class\s+([a-zA-Z\s]+=>\s+)?{}(\s+[a-z]+)*\s+where\s'.format(text_raw)
+            first_constructor_text = r'(data|newtype) .+\s* =\s* {}\s'.format(text_raw)
+            later_constructor_text = r'\|\s* {}\s'.format(text_raw)
 
-        if not text_raw:
-            return
-
-        is_type_level = text_raw[0].upper() == text_raw[0]
-
-        if is_type_level:
-            data_text = r'\s(data|newtype|type)\s+{}(\s+[a-z]+)*\s+(=|where)\s'.format(text_raw)
-            class_text = r'\sclass\s+([a-zA-Z\s]+=>\s+)?{}(\s+[a-z]+)*\s+where\s'.format(text_raw)
-            text = r'(({})|({}))'.format(data_text, class_text)
+            text = r'({})|({})|({})|({})'.format(data_text, class_text,
+                                                 first_constructor_text, later_constructor_text)
         else:
-            text = r'\s({})\s+::\s+.'.format(text_raw)
+            # Value type annotation.
+            value_annot_text = r'({})\s+::\s+.'.format(text_raw)
+            # Value definition.
+            value_defn_text = r'({})\s+.*\s*=\s'.format(text_raw)
+            # Record getter.
+            record_getter_text = r'[{{,]\s+({})\s+::\s+'.format(text_raw)
+            text = r'({})|({})|({})'.format(value_defn_text, record_getter_text, value_annot_text)
+        return text
 
-        if self.last_search_string != text:
-            self.last_selected_result_index = 0
-        self.last_search_string = text
-        folders = self.search_folders()
+class FindSelectionDefinitionInProjectCommand(FindDefinitionInProjectCommand):
 
-        self.common_path = self.find_common_path(folders)
-        try:
-            self.results = self.engine.run(text, folders, keep_adjacents=False)
-            if self.results:
-                self.results = [[result[0].replace(self.common_path.replace('\"', ''), ''), result[1][:self.MAX_RESULT_LINE_LENGTH]] for result in self.results]
-                if self.settings.get('search_in_project_show_list_by_default') == 'true':
-                    self.list_in_view()
-                else:
-                    self.results.append("``` List results in view ```")
-                    flags = 0
-                    self.window.show_quick_panel(
-                        self.results,
-                        self.goto_result,
-                        flags,
-                        self.last_selected_result_index,
-                        self.on_highlighted)
-            else:
-                self.results = []
-                sublime.message_dialog('No results')
-        except Exception as e:
-            self.results = []
-            sublime.error_message("%s running search engine %s:"%(e.__class__.__name__,self.engine_name) + "\n" + str(e))
+    def search(self):
+        auto_search(self)
 
 class SearchInProjectResultsCommand(sublime_plugin.TextCommand):
     def format_result(self, common_path, filename, lines):
