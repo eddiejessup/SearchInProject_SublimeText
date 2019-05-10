@@ -234,12 +234,12 @@ class FindDefinitionInProjectCommand(SearchInProjectCommand):
                                                  first_constructor_text, later_constructor_text)
         else:
             # Value type annotation.
-            value_annot_text = r'({})\s+::\s+.'.format(text_raw)
+            value_annot_text = r'^ *({})\s+::\s+.'.format(text_raw)
             # Value definition.
-            value_defn_text = r'({})\s+.*\s*=\s'.format(text_raw)
+            value_defn_text = r'^ *({})\s+[^=$]*\s=\s'.format(text_raw)
             # Record getter.
-            record_getter_text = r'[{{,]\s+({})\s+::\s+'.format(text_raw)
-            text = r'({})|({})|({})'.format(value_defn_text, record_getter_text, value_annot_text)
+            record_getter_text = r'^ *[{{,]\s+({})\s+::\s+'.format(text_raw)
+            text = r'({})|({})|({})'.format(value_annot_text, value_defn_text, record_getter_text)
         return text
 
 class FindSelectionDefinitionInProjectCommand(FindDefinitionInProjectCommand):
