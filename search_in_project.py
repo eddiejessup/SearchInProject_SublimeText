@@ -225,13 +225,16 @@ class FindDefinitionInProjectCommand(SearchInProjectCommand):
     def process_text(self, text_raw):
         text_raw = text_raw.strip()
         if text_raw[0].upper() == text_raw[0]:
+            module_text = r'^module +({})\s'.format(text_raw)
             data_text = r'^(data|newtype|type)\s+{}(\s+[a-z]+)*\s+(=|where)\s'.format(text_raw)
             class_text = r'^class\s+([a-zA-Z\s]+=>\s+)?{}(\s+[a-z]+)*\s+where\s'.format(text_raw)
             first_constructor_text = r'(data|newtype) .+\s* =\s* {}\s'.format(text_raw)
             later_constructor_text = r'\|\s* {}\s'.format(text_raw)
 
-            text = r'({})|({})|({})|({})'.format(data_text, class_text,
-                                                 first_constructor_text, later_constructor_text)
+            text = r'({})|({})|({})|({})|({})'.format(module_text,
+                                                      data_text, class_text,
+                                                      first_constructor_text,
+                                                      later_constructor_text)
         else:
             # Value type annotation.
             value_annot_text = r'^ *({})\s+::\s+.'.format(text_raw)
