@@ -4,7 +4,7 @@ import os.path
 import os
 import sys
 import inspect
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 ### Start of fixing import paths
 # realpath() with make your script run, even if you symlink it :)
@@ -215,26 +215,41 @@ class FindDefinitionInProjectCommand(SearchInProjectCommand):
     def run_engine(self, text_raw, folders):
         text_raw = text_raw.strip()
         is_uppercasey = text_raw[0].isalpha() and text_raw[0].upper() == text_raw[0]
+        patterns = []
         if is_uppercasey:
             module_text = r'^module +({})\s'.format(text_raw)
             data_text = r'^(data|newtype|type)\s+{}(\s+[a-z]+)*\s+(=|where)\s'.format(text_raw)
-            class_text = r'^class\s+([a-zA-Z\s]+=>\s+)?{}(\s+[a-z]+)*\s+where\s'.format(text_raw)
+            class_text = r'^class\s+([a-zA-Z\s.\(\),]+=>\s+)?{}(\s+[a-z]+)*\s+where\s'.format(text_raw)
+
             first_constructor_text = r'(data|newtype) .+\s* =\s* {}\s'.format(text_raw)
             later_constructor_text = r'\|\s* {}\s'.format(text_raw)
+            constructor_text = '({})|({})'.format(first_constructor_text, later_constructor_text)
 
-            text = r'({})|({})|({})|({})|({})'.format(module_text,
-                                                      data_text, class_text,
-                                                      first_constructor_text,
-                                                      later_constructor_text)
+            patterns = OrderedDict([
+              ('Module', module_text),
+              ('Type def\'n', data_text),
+              ('Class def\n', class_text),
+              ('Constructor', constructor_text),
+            ])
         else:
-            # Value type annotation.
             value_annot_text = r'^ *({})\s+::\s+.'.format(text_raw)
-            # Value definition.
             value_defn_text = r'^ *({})\s+[^=$]*\s=\s'.format(text_raw)
-            # Record getter.
             record_getter_text = r' +[{{,] +({})\s+::\s+'.format(text_raw)
-            text = r'({})|({})|({})'.format(value_annot_text, value_defn_text, record_getter_text)
-        return self.engine.run(text, folders, keep_adjacents=False)
+
+            patterns = OrderedDict([
+              ('Value type', value_annot_text),
+              ('Value def\'n', value_defn_text),
+              ('Record getter', record_getter_text),
+            ])
+        results = []
+        for pattern_name, pattern in patterns.items():
+            pat_results = self.engine.run(pattern, folders, keep_adjacents=False)
+            pat_results_annotated = [
+              (p, '{}: {}'.format(pattern_name, c))
+              for p, c in pat_results
+            ]
+            results.extend(pat_results_annotated)
+        return results
 
 class FindSelectionDefinitionInProjectCommand(FindDefinitionInProjectCommand):
 
