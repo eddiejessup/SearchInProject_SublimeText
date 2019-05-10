@@ -224,7 +224,8 @@ class FindDefinitionInProjectCommand(SearchInProjectCommand):
 
     def process_text(self, text_raw):
         text_raw = text_raw.strip()
-        if text_raw[0].upper() == text_raw[0]:
+        is_uppercasey = text_raw[0].isalpha() and text_raw[0].upper() == text_raw[0]
+        if is_uppercasey:
             module_text = r'^module +({})\s'.format(text_raw)
             data_text = r'^(data|newtype|type)\s+{}(\s+[a-z]+)*\s+(=|where)\s'.format(text_raw)
             class_text = r'^class\s+([a-zA-Z\s]+=>\s+)?{}(\s+[a-z]+)*\s+where\s'.format(text_raw)
@@ -241,7 +242,7 @@ class FindDefinitionInProjectCommand(SearchInProjectCommand):
             # Value definition.
             value_defn_text = r'^ *({})\s+[^=$]*\s=\s'.format(text_raw)
             # Record getter.
-            record_getter_text = r'^ *[{{,]\s+({})\s+::\s+'.format(text_raw)
+            record_getter_text = r' +[{{,] +({})\s+::\s+'.format(text_raw)
             text = r'({})|({})|({})'.format(value_annot_text, value_defn_text, record_getter_text)
         return text
 
