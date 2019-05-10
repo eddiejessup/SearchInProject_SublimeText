@@ -77,14 +77,9 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
     def run_engine(self, text, folders):
         return self.engine.run(text, folders)
 
-    def process_text(self, text_raw):
-        return text_raw
-
     def perform_search(self, text):
         if not text:
             return
-
-        text = self.process_text(text)
 
         if self.last_search_string != text:
             self.last_selected_result_index = 0
@@ -94,8 +89,6 @@ class SearchInProjectCommand(sublime_plugin.WindowCommand):
         self.common_path = self.find_common_path(folders)
         try:
             self.results = self.run_engine(text, folders)
-            print("self.results")
-            print(self.results)
             if self.results:
                 self.results = [[result[0].replace(self.common_path.replace('\"', ''), ''), result[1][:self.MAX_RESULT_LINE_LENGTH]] for result in self.results]
                 if self.settings.get('search_in_project_show_list_by_default') == 'true':
@@ -219,10 +212,7 @@ class FindDefinitionInProjectCommand(SearchInProjectCommand):
 
     INPUT_PROMPT_STR = "Find definition in project:"
 
-    def run_engine(self, text, folders):
-        return self.engine.run(text, folders, keep_adjacents=False)
-
-    def process_text(self, text_raw):
+    def run_engine(self, text_raw, folders):
         text_raw = text_raw.strip()
         is_uppercasey = text_raw[0].isalpha() and text_raw[0].upper() == text_raw[0]
         if is_uppercasey:
@@ -244,7 +234,7 @@ class FindDefinitionInProjectCommand(SearchInProjectCommand):
             # Record getter.
             record_getter_text = r' +[{{,] +({})\s+::\s+'.format(text_raw)
             text = r'({})|({})|({})'.format(value_annot_text, value_defn_text, record_getter_text)
-        return text
+        return self.engine.run(text, folders, keep_adjacents=False)
 
 class FindSelectionDefinitionInProjectCommand(FindDefinitionInProjectCommand):
 
